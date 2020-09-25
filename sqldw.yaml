@@ -1,0 +1,111 @@
+# IaC Master CI CD pipeline definition
+# This definition is responsible for building and pushing
+# the dacpac of the built SSDT project. It pushes artefacts
+# to the artefacts directory to be used in release later.
+# test
+
+#trigger:
+#  branches:
+#    include:
+#    - master
+#  paths:
+#    include:
+#      - 'ci-cd-sqldwV2.yaml'
+#      - 'SqlDW/*'
+
+trigger: none
+pr: none
+
+variables:
+- template: /IaC/pipelines/variables.yml
+- name: 'SolutionFile'
+  value: 'SqlDW'
+
+stages:
+- stage: BuildStage
+  displayName: 'Build the Database Project to get DacPac'
+  jobs:
+    - job: BuildDacpac
+      pool:
+        vmImage: 'windows-latest'
+      variables:
+        buildConfiguration: 'Release'
+      steps:
+      # Build the sln to get the dacpac
+      - task: VSBuild@1
+        displayName: 'Build/Compile the Solutions sln file'
+        inputs:
+          solution: '$(Build.SourcesDirectory)/SqlDW/$(SolutionFile).sln' 
+          configuration: $(buildConfiguration)
+
+        #Publish the dacpac
+      - task: PublishPipelineArtifact@1
+        displayName: 'Publish [DACPAC]'
+        inputs:
+          targetPath: '$(Build.SourcesDirectory)/SqlDW/$(SolutionFile)/bin/$(buildConfiguration)' 
+          artifactName: '$(Build.BuildNumber)'
+
+
+- stage: DeployToSQLDWDev
+  displayName: 'Development Environment Deployment'
+  jobs:
+  - deployment: DeployToDevDW
+    displayName: 'Deploy to the development sql dw'
+    pool:
+      vmImage: 'windows-latest'
+    variables:
+      envName: 'dev'
+    environment: 'dev'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+              # Download Azure Key Vault secrets for prod dw
+            - task: AzureKeyVault@1
+              displayName: 'Get Secrets [Key Vault]'
+              inputs:
+                azureSubscription: $(devSubscription)
+                keyVaultName: $(devVaultName)
+                secretsFilter: '*'
+
+            - task: SqlAzureDacpacDeployment@1
+              displayName: 'Deploy [DACPAC]'
+              inputs:
+                azureSubscription: $(devSubscription)
+                ServerName: $(sqlServer01Name)
+                DatabaseName: $(sqlDataWarehouse01Name)
+                SqlUsername: $(sql-server-admin)
+                SqlPassword: $(sql-server-admin-pw)
+                DacpacFile: '$(Pipeline.Workspace)/$(Build.BuildNumber)/$(SqlDW).dacpac'
+
+- stage: DeployToSQLDWProduction
+  displayName: 'Production Environment Deployment'
+  jobs:
+  - deployment: DeployToProductionDb
+    displayName: 'Deploy to the production sql dw'
+    pool:
+      vmImage: 'windows-latest'
+    variables:
+      envName: 'prd'
+    environment: 'prd'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+              # Download Azure Key Vault secrets for prod dw
+            - task: AzureKeyVault@1
+              displayName: 'Get Secrets [Key Vault]'
+              inputs:
+                azureSubscription: $(prodSubscription)
+                keyVaultName: $(prodVaultName)
+                secretsFilter: '*'
+
+            - task: SqlAzureDacpacDeployment@1
+              displayName: 'Deploy [DACPAC]'
+              inputs:
+                azureSubscription: $(prodSubscription)
+                ServerName: $(sqlServer01NameURL)
+                DatabaseName: $(sqlDataWarehouse01Name)
+                SqlUsername: $(sql-server-admin)
+                SqlPassword: $(sql-server-admin-pw)
+                DacpacFile: '$(Pipeline.Workspace)/$(Build.BuildNumber)/$(SolutionFile).dacpac'
