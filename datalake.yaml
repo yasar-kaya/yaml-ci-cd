@@ -1,0 +1,105 @@
+Description: hi, here is a sample ci-cd pipeline for Azure Data Lake Gen2 file system
+
+trigger: none
+pr: none
+
+variables:
+- template: /IaC/pipelines/variables.yml
+
+stages:
+
+- stage: BuildStage
+  displayName: 'Build Subfolder Hierarchy For Data Lake'
+  jobs:
+    - job: PublishFolderHieararchy
+      displayName: 'Publish Folder Hieararchy'
+      steps:
+      - task: PublishPipelineArtifact@1
+        displayName: 'Publish The Artifact'
+        inputs:
+          targetPath: '$(Build.SourcesDirectory)/BlobStorage/content' 
+          artifactName: '$(Build.BuildNumber)'
+
+# Create folders at dev Storage
+- stage: CreateFoldersAtDev
+  displayName: 'Build Subfolder Hierarchy For Dev'
+  jobs:
+    - job: CreateFoldersAtDev
+      displayName: 'Create Folders'
+      pool:
+        vmImage: 'windows-2019'
+      variables:
+        envName: 'dev'
+      steps:
+        # stg layer
+      - task: AzureFileCopy@3
+        displayName: 'AzureBlob File Copy for Stg'
+        inputs:
+          SourcePath: '$(Build.SourcesDirectory)/BlobStorage/content/stg'
+          azureSubscription: '$(devSubscription)'
+          Destination: AzureBlob
+          storage: $(storage01Name)
+          ContainerName: stg
+        timeoutInMinutes: 10
+        # raw layer
+      - task: AzureFileCopy@3
+        displayName: 'AzureBlob File Copy for Raw'
+        inputs:
+          SourcePath: '$(Build.SourcesDirectory)/BlobStorage/content/raw'
+          azureSubscription: '$(devSubscription)'
+          Destination: AzureBlob
+          storage: $(storage01Name)
+          ContainerName: raw
+        timeoutInMinutes: 10
+        # consumed layer
+      - task: AzureFileCopy@3
+        displayName: 'AzureBlob File Copy for Consumed'
+        inputs:
+          SourcePath: '$(Build.SourcesDirectory)/BlobStorage/content/consumed'
+          azureSubscription: '$(devSubscription)'
+          Destination: AzureBlob
+          storage: $(storage01Name)
+          ContainerName: consumed
+        timeoutInMinutes: 10
+
+# Create folders at prod Storage
+- stage: CreateFoldersAtProd
+  displayName: 'Build Subfolder Hierarchy For Prod'
+  jobs:
+    - job: CreateFoldersAtProd
+      displayName: 'Create Folders'
+      pool:
+        vmImage: 'windows-2019'
+      variables:
+        envName: 'prd'
+      steps:
+        # stg layer
+      - task: AzureFileCopy@3
+        displayName: 'AzureBlob File Copy for Stg'
+        inputs:
+          SourcePath: '$(Build.SourcesDirectory)/BlobStorage/content/stg'
+          azureSubscription: '$(prodSubscription)'
+          Destination: AzureBlob
+          storage: $(storage01Name)
+          ContainerName: stg
+        timeoutInMinutes: 10
+        # raw layer
+      - task: AzureFileCopy@3
+        displayName: 'AzureBlob File Copy for Raw'
+        inputs:
+          SourcePath: '$(Build.SourcesDirectory)/BlobStorage/content/raw'
+          azureSubscription: '$(prodSubscription)'
+          Destination: AzureBlob
+          storage: $(storage01Name)
+          ContainerName: raw
+        timeoutInMinutes: 10
+        # consumed layer
+      - task: AzureFileCopy@3
+        displayName: 'AzureBlob File Copy for Consumed'
+        inputs:
+          SourcePath: '$(Build.SourcesDirectory)/BlobStorage/content/consumed'
+          azureSubscription: '$(prodSubscription)'
+          Destination: AzureBlob
+          storage: $(storage01Name)
+          ContainerName: consumed
+        timeoutInMinutes: 10
